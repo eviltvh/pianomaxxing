@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Teclado desde cero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: cabecera con entradas (mic / MIDI / oído), lecciones a la izquierda, ejercicio al centro, teclado a todo lo ancho abajo */
+:root{
+  --bg:#ECEEF2; --surface:#FFFFFF; --ink:#0E1014; --muted:#596070; --line:#0E1014; --shadow:#0E1014;
+  --accent:#2547FF; --accent-soft:#DCE2FF; --on-accent:#FFFFFF;
+  --ok:#0A9450; --ok-soft:#D3F2E1; --bad:#D63426; --bad-soft:#FADAD6;
+  --keyw:#FFFFFF; --keyw-edge:#C4C9D3; --keyb:#16181D; --keylabel:#4B5260;
+  --f-display:"Bricolage Grotesque","Arial Black",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0F1115; --surface:#191C22; --ink:#ECEEF2; --muted:#9AA1AE; --line:#D5D9E0; --shadow:#000000;
+    --accent:#7189FF; --accent-soft:#222B55; --on-accent:#0B0D12;
+    --ok:#3DD68C; --ok-soft:#163928; --bad:#FF6E61; --bad-soft:#45201C;
+    --keyw:#E6E8EC; --keyw-edge:#8E95A1; --keyb:#08090B; --keylabel:#4B5260;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--f-body)}
+button{font:inherit;color:inherit}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Cabecera */
+.top{border-bottom:2px solid var(--line);background:var(--surface)}
+.top .wrap{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center;justify-content:space-between;padding-block:18px}
+.brand h1{font:800 clamp(1.6rem,3.2vw,2.3rem)/1 var(--f-display);letter-spacing:-.02em;margin:0}
+.brand p{margin:6px 0 0;font:500 .78rem/1.3 var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.inputs{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+.hint{flex-basis:100%;margin:0;font-size:.85rem;color:var(--muted);max-width:62ch}
+
+.btn{display:inline-flex;align-items:center;gap:8px;padding:.55rem .9rem;border:2px solid var(--line);background:var(--surface);
+  font-weight:600;cursor:pointer;box-shadow:3px 3px 0 var(--shadow);transition:transform .06s,box-shadow .06s}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--shadow)}
+.btn:focus-visible,.lesson-btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);color:var(--on-accent)}
+.btn.on{background:var(--ok-soft)}
+.btn .dot{width:10px;height:10px;border-radius:50%;border:2px solid var(--line);background:transparent}
+.btn.on .dot{background:var(--ok);border-color:var(--ok)}
+
+.ear{display:flex;align-items:center;gap:10px;border:2px solid var(--line);padding:.35rem .75rem;font-family:var(--f-mono);min-width:200px}
+.ear .lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.ear b{font-size:1.05rem;min-width:5.5ch;font-variant-numeric:tabular-nums}
+.meter{flex:1;height:8px;border:2px solid var(--line);min-width:50px}
+.meter i{display:block;height:100%;width:0;background:var(--accent);transition:width .05s linear}
+
+/* Cuerpo */
+.layout{display:grid;grid-template-columns:minmax(0,240px) minmax(0,1fr);gap:28px;padding-block:28px}
+.lessons{display:flex;flex-direction:column;gap:10px}
+.lesson-btn{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;text-align:left;padding:12px 14px;border:2px solid var(--line);
+  background:var(--surface);cursor:pointer}
+.lesson-btn .num{grid-row:span 2;font:800 2rem/1 var(--f-display);align-self:center}
+.lesson-btn .t{font-weight:600;line-height:1.25}
+.lesson-btn .s{font:500 .72rem/1.3 var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.lesson-btn.done .s{color:var(--ok)}
+.lesson-btn.current{background:var(--ink);color:var(--bg);box-shadow:4px 4px 0 var(--accent)}
+.lesson-btn.current .s{color:var(--bg);opacity:.75}
+
+.lesson{display:grid;gap:22px;min-width:0}
+.eyebrow{font:600 .74rem/1.2 var(--f-mono);text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.lesson-head h2{font:800 clamp(1.9rem,4.4vw,3rem)/1.02 var(--f-display);letter-spacing:-.025em;margin:6px 0 12px;text-wrap:balance}
+.intro{display:grid;gap:10px;max-width:64ch}
+.intro p{margin:0}
+.fingers{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 0;padding:0;list-style:none;font:500 .82rem/1 var(--f-mono)}
+.fingers li{border:2px solid var(--line);padding:6px 8px}
+.fingers b{color:var(--accent)}
+
+.exercise{border:2px solid var(--line);background:var(--surface);box-shadow:5px 5px 0 var(--shadow);padding:20px;display:grid;gap:16px;min-width:0}
+.ex-head p{margin:6px 0 0;font-size:1.05rem;max-width:62ch}
+.strip{display:flex;flex-wrap:wrap;gap:6px}
+.chip{flex:var(--b,1) 1 0;min-width:50px;border:2px solid var(--line);padding:6px 8px;display:grid;gap:1px;background:var(--surface);transition:transform .12s}
+.chip .n{font-weight:600;line-height:1.2}
+.chip .f{font:500 .7rem/1.2 var(--f-mono);color:var(--muted)}
+.chip.done{background:var(--ok-soft);border-color:var(--ok)}
+.chip.now{background:var(--accent);color:var(--on-accent);transform:translateY(-3px)}
+.chip.now .f{color:var(--on-accent);opacity:.85}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.tempo{display:flex;align-items:center;gap:8px;font:500 .8rem/1 var(--f-mono);color:var(--muted);margin-left:auto}
+.tempo input{width:110px;accent-color:var(--accent)}
+.tempo span{min-width:3ch;font-variant-numeric:tabular-nums;color:var(--ink)}
+.feedback{margin:0;min-height:1.6em;font-weight:600}
+.feedback.ok{color:var(--ok)} .feedback.bad{color:var(--bad)}
+
+/* Teclado */
+.kb-wrap{padding-bottom:40px}
+.kb-bar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin-bottom:10px;font:500 .78rem/1.3 var(--f-mono);color:var(--muted)}
+.kb-bar .btn{font:600 .78rem/1 var(--f-mono);padding:.45rem .7rem}
+.kb-scroll{overflow-x:auto;border:2px solid var(--line);box-shadow:5px 5px 0 var(--shadow);background:var(--keyb);padding:14px 10px 10px}
+.kb{position:relative;height:clamp(180px,24vw,250px);min-width:620px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.wk,.bk{position:absolute;top:0;cursor:pointer;transition:background-color .12s,transform .06s}
+.wk{bottom:0;background:var(--keyw);border:1px solid var(--keyw-edge);border-radius:0 0 7px 7px;
+  display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;padding-bottom:10px;color:var(--keylabel)}
+.bk{height:62%;background:var(--keyb);border:1px solid #000;border-top:0;border-radius:0 0 5px 5px;z-index:2;
+  display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:8px;box-shadow:inset 0 -6px 0 #2B2F37}
+.wk .nm{font-weight:600;font-size:.85rem}
+.wk .pc,.bk .pc{font:500 .62rem/1 var(--f-mono);opacity:.55}
+.bk .pc{color:#C9CED8}
+.wk .mc{font:600 .58rem/1 var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--keylabel)}
+.wk.ghost{box-shadow:inset 0 -7px 0 var(--accent)}
+.bk.ghost{box-shadow:inset 0 -7px 0 var(--accent)}
+.wk.target,.bk.target{background:var(--accent);color:var(--on-accent)}
+.wk.target .mc{color:var(--on-accent)}
+.wk.down,.bk.down{transform:translateY(2px);filter:brightness(.82)}
+.wk.hit,.bk.hit{background:var(--ok)!important}
+.wk.miss,.bk.miss{background:var(--bad)!important}
+.fg{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 .85rem/1 var(--f-mono);
+  background:var(--on-accent);color:var(--accent)}
+.bk .fg{width:20px;height:20px;font-size:.72rem}
+
+@media (max-width:780px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:20px}
+  .lessons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .lesson-btn{grid-template-columns:1fr;padding:10px}
+  .lesson-btn .num{grid-row:auto;font-size:1.5rem}
+  .tempo{margin-left:0}
+  .ear{flex:1}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>Teclado desde cero</h1>
+      <p>3 lecciones · te escucha mientras tocas</p>
+    </div>
+    <div class="inputs">
+      <button id="btnMic" class="btn" type="button"><span class="dot"></span><span class="tx">Activar micrófono</span></button>
+      <button id="btnMidi" class="btn" type="button"><span class="dot"></span><span class="tx">Conectar por USB (MIDI)</span></button>
+      <div class="ear" aria-live="polite"><span class="lbl">Oigo</span><b id="heard">—</b><div class="meter"><i id="meter"></i></div></div>
+      <p class="hint" id="inputHint">Activa el micrófono para que la página oiga tu teclado, o conéctalo por USB si tiene salida MIDI. También puedes tocar en pantalla o con las teclas A a K de tu compu.</p>
+    </div>
+  </div>
+</header>
+
+<main class="wrap layout">
+  <nav class="lessons" id="nav" aria-label="Lecciones"></nav>
+  <section class="lesson">
+    <div class="lesson-head">
+      <span class="eyebrow" id="lEyebrow"></span>
+      <h2 id="lTitle"></h2>
+      <div class="intro" id="lIntro"></div>
+    </div>
+    <div class="exercise">
+      <div class="ex-head">
+        <span class="eyebrow" id="exLabel"></span>
+        <p id="exText"></p>
+      </div>
+      <div class="strip" id="strip"></div>
+      <div class="controls">
+        <button id="btnListen" class="btn primary" type="button">Escuchar ejemplo</button>
+        <button id="btnRestart" class="btn" type="button">Reiniciar ejercicio</button>
+        <button id="btnNext" class="btn" type="button" hidden>Siguiente lección</button>
+        <label class="tempo" for="tempo">Velocidad <input type="range" id="tempo" min="50" max="140" value="84"><span id="tempoVal">84</span></label>
+      </div>
+      <p class="feedback" id="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+</main>
+
+<section class="wrap kb-wrap">
+  <div class="kb-bar">
+    <span>La tecla azul es la que sigue. El número es el dedo.</span>
+    <button id="btnNames" class="btn" type="button">Ver C D E</button>
+  </div>
+  <div class="kb-scroll"><div class="kb" id="kb"></div></div>
+</section>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const SOL = ['Do','Do♯','Re','Re♯','Mi','Fa','Fa♯','Sol','Sol♯','La','La♯','Si'];
+const LET = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const BLACK = [1,3,6,8,10];
+const LOW = 48, HIGH = 72;               // Do3 a Do5
+let letters = false;
+const pc = m => ((m % 12) + 12) % 12;
+const nm = m => (letters ? LET : SOL)[pc(m)];
+const nmOct = m => nm(m) + ' ' + (Math.floor(m / 12) - 1);
+const N = (m, f = null, b = 1) => ({ m, f, b });
+
+/* ---------- Lecciones ---------- */
+const LESSONS = [
+  {
+    title: 'Encuentra el Do',
+    ghost: true,
+    intro: [
+      'Las teclas negras vienen en grupos de 2 y de 3. Esos grupos son tu mapa: con ellos ubicas cualquier nota sin etiquetas.',
+      'El Do es la tecla blanca justo a la izquierda de cada grupo de 2 negras. Hay un Do en cada octava; el que queda más cerca del centro de tu teclado es el Do central.',
+      'En esta lección cuenta la nota correcta en cualquier parte del teclado. Las marcas azules abajo de las teclas te muestran todas las opciones.'
+    ],
+    exercises: [
+      { label: 'Toca tres Do', text: 'Toca un Do, luego otro más arriba y otro más abajo. Todos cuentan.', notes: [N(60), N(60), N(60)] },
+      { label: 'Do, Re, Mi', text: 'Las tres blancas que rodean el grupo de 2 negras. Pulgar en Do, índice en Re, medio en Mi.', notes: [N(60,1), N(62,2), N(64,3)] },
+      { label: 'Fa, Sol, La, Si', text: 'Las cuatro blancas que rodean el grupo de 3 negras. Fa está justo a la izquierda del grupo.', notes: [N(65), N(67), N(69), N(71)] },
+      { label: 'De Do a Do', text: 'Sube por todas las blancas, del Do central al siguiente Do. Aquí solo importa encontrar las notas; usa el dedo que quieras.', notes: [60,62,64,65,67,69,71,72].map(m => N(m)) }
+    ]
+  },
+  {
+    title: 'Cinco dedos',
+    ghost: false,
+    intro: [
+      'Siéntate frente al centro del teclado, con los antebrazos rectos. Dedos curvos, como si sostuvieras una pelota, y toca con la yema.',
+      '__fingers__',
+      'Cada dedo tiene su tecla y no se mueve de ahí. Ve lento: que todas las notas duren lo mismo y suenen igual de fuerte.'
+    ],
+    exercises: [
+      { label: 'Subir', text: 'Pulgar en Do central. Toca Do, Re, Mi, Fa, Sol, un dedo por tecla.', notes: [N(60,1), N(62,2), N(64,3), N(65,4), N(67,5)] },
+      { label: 'Bajar', text: 'Desde el meñique en Sol, regresa hasta Do.', notes: [N(67,5), N(65,4), N(64,3), N(62,2), N(60,1)] },
+      { label: 'Saltos', text: 'Sin mover la mano: Do, Mi, Sol, Mi, Do con los dedos 1, 3 y 5.', notes: [N(60,1), N(64,3), N(67,5), N(64,3), N(60,1)] },
+      { label: 'Mano izquierda', text: 'Ahora la izquierda, una octava abajo: meñique en Do, pulgar en Sol. Sube y vuelve a bajar.', notes: [N(48,5), N(50,4), N(52,3), N(53,2), N(55,1), N(53,2), N(52,3), N(50,4), N(48,5)] }
+    ]
+  },
+  {
+    title: 'Oda a la alegría',
+    ghost: false,
+    intro: [
+      'Una melodía de Beethoven que usa solo las cinco notas de la lección 2. Tu mano derecha no se mueve: pulgar en Do central.',
+      'Primero dale a «Escuchar ejemplo» para oír el ritmo. Luego tócala a tu paso: la página espera cada nota, no hay prisa.'
+    ],
+    exercises: []
+  }
+];
+const F1 = [N(64,3),N(64,3),N(65,4),N(67,5),N(67,5),N(65,4),N(64,3),N(62,2),N(60,1),N(60,1),N(62,2),N(64,3),N(64,3,1.5),N(62,2,.5),N(62,2,2)];
+const F2 = [N(64,3),N(64,3),N(65,4),N(67,5),N(67,5),N(65,4),N(64,3),N(62,2),N(60,1),N(60,1),N(62,2),N(64,3),N(62,2,1.5),N(60,1,.5),N(60,1,2)];
+LESSONS[2].exercises = [
+  { label: 'Frase 1', text: 'Termina en Re, como si la frase quedara abierta. La última nota dura dos tiempos.', notes: F1 },
+  { label: 'Frase 2', text: 'Igual que la primera, pero al final baja a Do y cierra.', notes: F2 },
+  { label: 'Completa', text: 'Las dos frases seguidas. Si te equivocas, sigue: la página te espera en la nota correcta.', notes: [...F1, ...F2] }
+];
+
+/* ---------- Estado ---------- */
+const st = { L: 0, E: 0, pos: 0, miss: 0, demo: false, token: 0 };
+let progress = { done: [false, false, false] };
+try { const s = JSON.parse(localStorage.getItem('tdc-progress')); if (s && Array.isArray(s.done)) progress = s; } catch (e) {}
+const save = () => { try { localStorage.setItem('tdc-progress', JSON.stringify(progress)); } catch (e) {} };
+const lesson = () => LESSONS[st.L];
+const ex = () => lesson().exercises[st.E];
+
+/* ---------- Audio ---------- */
+let ac = null, master = null, suppressUntil = 0;
+function getAC() {
+  if (!ac) {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = ac.createDynamicsCompressor();
+    master = ac.createGain(); master.gain.value = 0.7;
+    master.connect(comp).connect(ac.destination);
+  }
+  if (ac.state === 'suspended') ac.resume();
+  return ac;
+}
+function playNote(m, dur = 0.5, t0) {
+  const a = getAC(); t0 = t0 ?? a.currentTime;
+  const f = 440 * 2 ** ((m - 69) / 12), end = t0 + dur + 0.9;
+  const g = a.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(0.38, t0 + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.14, t0 + 0.28);
+  g.gain.setValueAtTime(0.14, t0 + Math.max(0.29, dur * 0.7));
+  g.gain.exponentialRampToValueAtTime(0.0005, end);
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(Math.min(f * 9, 12000), t0);
+  lp.frequency.exponentialRampToValueAtTime(f * 2.2, t0 + 0.7);
+  const o1 = a.createOscillator(); o1.type = 'triangle'; o1.frequency.value = f;
+  const o2 = a.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * 2;
+  const g2 = a.createGain(); g2.gain.value = 0.25;
+  o1.connect(lp); o2.connect(g2).connect(lp); lp.connect(g).connect(master);
+  o1.start(t0); o2.start(t0); o1.stop(end); o2.stop(end);
+  // que el micrófono no confunda nuestro propio sonido con lo que tocas
+  suppressUntil = Math.max(suppressUntil, performance.now() + (t0 - a.currentTime + dur + 0.55) * 1000);
+}
+
+/* ---------- Teclado en pantalla ---------- */
+const kb = $('#kb'), keyEl = {};
+const PCKEYS = { a:60, w:61, s:62, e:63, d:64, f:65, t:66, g:67, y:68, h:69, u:70, j:71, k:72 };
+const PCLABEL = Object.fromEntries(Object.entries(PCKEYS).map(([k, m]) => [m, k.toUpperCase()]));
+function buildKeys() {
+  kb.innerHTML = '';
+  let whites = 0;
+  for (let m = LOW; m <= HIGH; m++) if (!BLACK.includes(pc(m))) whites++;
+  const W = 100 / whites; let wi = 0;
+  for (let m = LOW; m <= HIGH; m++) {
+    const el = document.createElement('div');
+    const isB = BLACK.includes(pc(m));
+    el.dataset.m = m;
+    if (isB) {
+      el.className = 'bk';
+      el.style.left = (wi * W - W * 0.31) + '%';
+      el.style.width = (W * 0.62) + '%';
+      el.innerHTML = `<span class="pc">${PCLABEL[m] || ''}</span>`;
+    } else {
+      el.className = 'wk';
+      el.style.left = (wi * W) + '%';
+      el.style.width = W + '%';
+      el.innerHTML = `${m === 60 ? '<span class="mc">central</span>' : ''}<span class="pc">${PCLABEL[m] || ''}</span><span class="nm">${nm(m)}</span>`;
+      wi++;
+    }
+    el.addEventListener('pointerdown', e => { e.preventDefault(); handleNote(m, 'screen'); });
+    kb.appendChild(el); keyEl[m] = el;
+  }
+}
+function press(m, ms = 220) {
+  const el = keyEl[m]; if (!el) return;
+  el.classList.add('down');
+  if (ms) setTimeout(() => el.classList.remove('down'), ms);
+}
+function flash(m, cls) {
+  const el = keyEl[m]; if (!el) return;
+  el.classList.remove('hit', 'miss'); void el.offsetWidth; el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 380);
+}
+function renderTargets() {
+  Object.values(keyEl).forEach(el => { el.classList.remove('target', 'ghost'); el.querySelector('.fg')?.remove(); });
+  const e = ex(); if (st.demo || st.pos >= e.notes.length) return;
+  const t = e.notes[st.pos];
+  if (lesson().ghost) Object.entries(keyEl).forEach(([m, el]) => { if (pc(+m) === pc(t.m)) el.classList.add('ghost'); });
+  const el = keyEl[t.m]; if (!el) return;
+  el.classList.remove('ghost'); el.classList.add('target');
+  if (t.f) { const b = document.createElement('span'); b.className = 'fg'; b.textContent = t.f; el.prepend(b); }
+}
+
+/* ---------- Render de lección ---------- */
+function renderNav() {
+  const nav = $('#nav'); nav.innerHTML = '';
+  LESSONS.forEach((l, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lesson-btn' + (i === st.L ? ' current' : '') + (progress.done[i] ? ' done' : '');
+    b.innerHTML = `<span class="num">${i + 1}</span><span class="t">${l.title}</span><span class="s">${progress.done[i] ? 'Hecha' : i === st.L ? 'En curso' : 'Pendiente'}</span>`;
+    b.addEventListener('click', () => goLesson(i));
+    nav.appendChild(b);
+  });
+}
+function renderLesson() {
+  const l = lesson();
+  $('#lEyebrow').textContent = `Lección ${st.L + 1} de ${LESSONS.length}`;
+  $('#lTitle').textContent = l.title;
+  const intro = $('#lIntro'); intro.innerHTML = '';
+  l.intro.forEach(p => {
+    if (p === '__fingers__') {
+      const ul = document.createElement('ul'); ul.className = 'fingers';
+      ['pulgar', 'índice', 'medio', 'anular', 'meñique'].forEach((d, i) => { const li = document.createElement('li'); li.innerHTML = `<b>${i + 1}</b> ${d}`; ul.appendChild(li); });
+      intro.appendChild(ul);
+    } else { const el = document.createElement('p'); el.textContent = p; intro.appendChild(el); }
+  });
+  renderExercise();
+}
+function renderExercise() {
+  const e = ex();
+  $('#exLabel').textContent = `Ejercicio ${st.E + 1} de ${lesson().exercises.length} · ${e.label}`;
+  $('#exText').textContent = e.text;
+  $('#btnNext').hidden = true;
+  feedback('', '');
+  renderStrip(); renderTargets();
+}
+function renderStrip() {
+  const strip = $('#strip'); strip.innerHTML = '';
+  ex().notes.forEach((n, i) => {
+    const c = document.createElement('div');
+    c.className = 'chip' + (i < st.pos ? ' done' : i === st.pos ? ' now' : '');
+    c.style.setProperty('--b', n.b);
+    c.innerHTML = `<span class="n">${nm(n.m)}</span><span class="f">${n.f ? 'dedo ' + n.f : '&nbsp;'}</span>`;
+    strip.appendChild(c);
+  });
+}
+function feedback(msg, cls) { const f = $('#feedback'); f.textContent = msg; f.className = 'feedback ' + cls; }
+
+function goLesson(i) {
+  stopDemo(); st.L = i; st.E = 0; st.pos = 0; st.miss = 0; st.token++;
+  renderNav(); renderLesson();
+}
+function restart() { stopDemo(); st.pos = 0; st.miss = 0; st.token++; renderExercise(); }
+
+function finishExercise() {
+  const l = lesson(), last = st.E === l.exercises.length - 1;
+  const msg = st.miss === 0 ? 'Perfecto, sin errores.' : `Listo, con ${st.miss} ${st.miss === 1 ? 'error' : 'errores'}.`;
+  if (!last) {
+    feedback(msg + ' Va el siguiente ejercicio.', 'ok');
+    const tk = ++st.token;
+    setTimeout(() => { if (tk !== st.token) return; st.E++; st.pos = 0; st.miss = 0; renderExercise(); }, 1600);
+  } else {
+    progress.done[st.L] = true; save(); renderNav();
+    if (st.L < LESSONS.length - 1) {
+      feedback(msg + ' Lección completa.', 'ok');
+      $('#btnNext').hidden = false;
+    } else {
+      feedback(msg + ' Terminaste las tres lecciones. Repite la Oda hasta tocarla sin mirar la pantalla.', 'ok');
+    }
+  }
+}
+
+/* ---------- Entrada de notas (pantalla, compu, MIDI, micrófono) ---------- */
+function handleNote(m, src) {
+  if (src === 'screen' || src === 'pc') playNote(m, 0.45);
+  if (src !== 'midi') press(m);
+  $('#heard').textContent = nmOct(m);
+  if (st.demo) return;
+  const e = ex(); if (st.pos >= e.notes.length) return;
+  const t = e.notes[st.pos];
+  if (pc(m) === pc(t.m)) {
+    flash(m, 'hit'); st.pos++;
+    renderStrip(); renderTargets();
+    if (st.pos === e.notes.length) finishExercise(); else feedback('', '');
+  } else {
+    flash(m, 'miss'); st.miss++;
+    feedback(`Esa fue ${nm(m)}. Busca ${nm(t.m)}.`, 'bad');
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  const m = PCKEYS[e.key.toLowerCase()];
+  if (m !== undefined) { e.preventDefault(); handleNote(m, 'pc'); }
+});
+
+/* MIDI */
+let lastMidiAt = 0;
+async function startMidi() {
+  const btn = $('#btnMidi');
+  if (!navigator.requestMIDIAccess) { setHint('Este navegador no soporta MIDI. Abre el archivo en Chrome o Edge.'); return; }
+  try {
+    const access = await navigator.requestMIDIAccess();
+    const bind = () => {
+      let n = 0, name = '';
+      access.inputs.forEach(inp => { inp.onmidimessage = onMidi; n++; name = inp.name; });
+      btn.classList.toggle('on', n > 0);
+      btn.querySelector('.tx').textContent = n ? `MIDI: ${name}` : 'MIDI: sin teclado';
+      if (!n) setHint('No encontré un teclado MIDI. Conéctalo por USB y vuelve a presionar el botón.');
+      else setHint('Teclado MIDI conectado. Toca y la página reconoce cada nota.');
+    };
+    bind(); access.onstatechange = bind;
+  } catch (err) { setHint('No pude acceder a MIDI. Revisa que el navegador tenga permiso.'); }
+}
+function onMidi(e) {
+  const [s, d1, d2] = e.data, cmd = s & 0xf0;
+  lastMidiAt = performance.now();
+  if (cmd === 0x90 && d2 > 0) { press(d1, 0); handleNote(d1, 'midi'); }
+  else if (cmd === 0x80 || (cmd === 0x90 && d2 === 0)) keyEl[d1]?.classList.remove('down');
+}
+
+/* Micrófono: detección de tono con el método McLeod (NSDF) */
+let micOn = false, stream = null, analyser = null, buf = null, nsdf = null;
+let cand = -1, cnt = 0, lastFired = -1, lastFireAt = 0, onsetAt = 0;
+const hist = [];
+async function toggleMic() {
+  const btn = $('#btnMic');
+  if (micOn) {
+    micOn = false; stream?.getTracks().forEach(t => t.stop());
+    btn.classList.remove('on'); btn.querySelector('.tx').textContent = 'Activar micrófono';
+    $('#meter').style.width = '0'; return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) { setHint('Este navegador no deja usar el micrófono aquí. Abre el archivo en Chrome o Edge.'); return; }
+  try {
+    const a = getAC();
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const srcNode = a.createMediaStreamSource(stream);
+    analyser = a.createAnalyser(); analyser.fftSize = 2048;
+    srcNode.connect(analyser);
+    buf = new Float32Array(analyser.fftSize); nsdf = new Float32Array(analyser.fftSize);
+    micOn = true; btn.classList.add('on'); btn.querySelector('.tx').textContent = 'Micrófono activo';
+    setHint('Te escucho. Toca una nota a la vez, con volumen medio y sin música de fondo. Usa el sonido de piano de tu teclado.');
+    requestAnimationFrame(listen);
+  } catch (err) {
+    setHint('No pude usar el micrófono. Dale permiso al navegador (ícono junto a la dirección) y vuelve a intentar.');
+  }
+}
+function detect(b, sr) {
+  const n = b.length; let s = 0;
+  for (let i = 0; i < n; i++) s += b[i] * b[i];
+  const rms = Math.sqrt(s / n);
+  if (rms < 0.006) return { rms, f: -1 };
+  const minT = Math.floor(sr / 1100), maxT = Math.min(Math.floor(sr / 70), n >> 1), W = n - maxT;
+  for (let t = 0; t <= maxT; t++) {
+    let acc = 0, m = 0;
+    for (let i = 0; i < W; i++) { const x = b[i], y = b[i + t]; acc += x * y; m += x * x + y * y; }
+    nsdf[t] = m > 0 ? 2 * acc / m : 0;
+  }
+  let t = 1; while (t < maxT && nsdf[t] > 0) t++;          // salir del lóbulo inicial
+  const peaks = []; let best = 0;
+  while (t < maxT) {
+    while (t < maxT && nsdf[t] <= 0) t++;
+    let pk = -1, pv = 0;
+    while (t < maxT && nsdf[t] > 0) { if (nsdf[t] > pv) { pv = nsdf[t]; pk = t; } t++; }
+    if (pk > 0) { peaks.push([pk, pv]); if (pv > best) best = pv; }
+  }
+  for (const [pk, pv] of peaks) {
+    if (pv >= 0.9 * best && pk >= minT) {
+      if (pv < 0.8) return { rms, f: -1 };
+      const a = nsdf[pk - 1], c = nsdf[pk + 1] ?? pv, den = a - 2 * pv + c;
+      const shift = den ? 0.5 * (a - c) / den : 0;
+      return { rms, f: sr / (pk + shift) };
+    }
+  }
+  return { rms, f: -1 };
+}
+function listen() {
+  if (!micOn) return;
+  analyser.getFloatTimeDomainData(buf);
+  const now = performance.now();
+  const { rms, f } = detect(buf, ac.sampleRate);
+  $('#meter').style.width = Math.min(100, rms * 600) + '%';
+  if (now < suppressUntil || now - lastMidiAt < 1000) {
+    hist.length = 0; cand = -1; cnt = 0; lastFired = -1;
+    requestAnimationFrame(listen); return;
+  }
+  hist.push(rms); if (hist.length > 6) hist.shift();
+  if (hist.length > 2) { const floor = Math.min(...hist.slice(0, -1)); if (rms > 0.012 && rms > floor * 1.8) onsetAt = now; }
+  if (rms < 0.006) { lastFired = -1; cand = -1; cnt = 0; }
+  if (f > 0) {
+    const m = Math.round(69 + 12 * Math.log2(f / 440));
+    if (m === cand) cnt++; else { cand = m; cnt = 1; }
+    if (cnt >= 2 && m >= 21 && m <= 108) {
+      const recentOnset = now - onsetAt < 180 && now - lastFireAt > 110;
+      const newPitch = lastFired < 0 || pc(m) !== pc(lastFired);
+      if (recentOnset || newPitch) { lastFired = m; lastFireAt = now; onsetAt = 0; handleNote(m, 'mic'); }
+    }
+  }
+  requestAnimationFrame(listen);
+}
+function setHint(t) { $('#inputHint').textContent = t; }
+
+/* ---------- Ejemplo sonoro ---------- */
+let demoTimers = [];
+function stopDemo() {
+  demoTimers.forEach(clearTimeout); demoTimers = [];
+  if (!st.demo) return;
+  st.demo = false; $('#btnListen').textContent = 'Escuchar ejemplo';
+  Object.values(keyEl).forEach(el => el.classList.remove('down'));
+  renderTargets();
+}
+function playDemo() {
+  if (st.demo) { stopDemo(); return; }
+  const a = getAC(), spb = 60 / +$('#tempo').value;
+  st.demo = true; $('#btnListen').textContent = 'Detener ejemplo';
+  renderTargets();
+  let t = a.currentTime + 0.15;
+  ex().notes.forEach(n => {
+    const dur = n.b * spb;
+    playNote(n.m, dur * 0.85, t);
+    const delay = (t - a.currentTime) * 1000;
+    demoTimers.push(setTimeout(() => press(n.m, dur * 850), delay));
+    t += dur;
+  });
+  demoTimers.push(setTimeout(stopDemo, (t - a.currentTime) * 1000 + 150));
+}
+
+/* ---------- Controles ---------- */
+$('#btnMic').addEventListener('click', toggleMic);
+$('#btnMidi').addEventListener('click', startMidi);
+$('#btnListen').addEventListener('click', playDemo);
+$('#btnRestart').addEventListener('click', restart);
+$('#btnNext').addEventListener('click', () => goLesson(Math.min(st.L + 1, LESSONS.length - 1)));
+$('#tempo').addEventListener('input', e => { $('#tempoVal').textContent = e.target.value; });
+$('#btnNames').addEventListener('click', () => {
+  letters = !letters;
+  $('#btnNames').textContent = letters ? 'Ver Do Re Mi' : 'Ver C D E';
+  buildKeys(); renderStrip(); renderTargets();
+});
+
+const firstOpen = progress.done.findIndex(d => !d);
+st.L = firstOpen === -1 ? 0 : firstOpen;
+buildKeys(); renderNav(); renderLesson();
+})();
+</script>
+</body>
+</html>
