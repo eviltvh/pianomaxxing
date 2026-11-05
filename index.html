@@ -148,6 +148,12 @@ button,select,textarea,input{font:inherit;color:inherit}
 .editor .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font:500 .82rem/1.2 var(--f-mono);color:var(--muted)}
 .editor select{border:2px solid var(--line);background:var(--surface);padding:.35rem .5rem}
 .editor code{font-family:var(--f-mono);background:var(--accent-soft);padding:1px 5px}
+.editor input[type=text]{border:2px solid var(--line);background:var(--surface);padding:.35rem .5rem;min-width:0;width:14rem;max-width:100%}
+.songs{display:grid;gap:6px}
+.song{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;border:2px solid var(--line);padding:8px 10px}
+.song .nm{font-weight:600;flex:1;min-width:10rem}
+.song .meta{font:500 .74rem/1.2 var(--f-mono);color:var(--muted)}
+.song.cur{background:var(--accent-soft)}
 
 /* Teclado */
 .kb-wrap{padding-bottom:40px}
@@ -240,15 +246,24 @@ body.focus .kb-wrap{padding-bottom:20px}
 
     <div class="exercise" id="editorBox" hidden>
       <div class="editor">
-        <span class="eyebrow">Escribe tu melodía</span>
-        <p style="margin:0">Separa las notas con guiones o espacios: <code>do re mi fa sol la si</code>. Para repetir usa <code>mi(x5)</code>. Para subir una octava agrega <code>'</code> (<code>do'</code>), para bajarla una coma (<code>la,</code>), o escribe la octava con número (<code>do5</code>). Sostenidos y bemoles: <code>fa#</code>, <code>sib</code>. En los tutoriales de colores, un color suele ser la octava de arriba: márcalo con <code>'</code>.</p>
-        <textarea id="seqIn" spellcheck="false" placeholder="mi(x3)-re-do  sol-la-si-do'  do'-si-la-sol"></textarea>
+        <span class="eyebrow">Tus canciones</span>
+        <p style="margin:0">Pega una partitura de letras estilo Virtual Piano (como las de Roblox o virtualpiano.net). Cada letra o número es una tecla y <code>t</code> es el Do central. Mayúscula o Shift = sostenido (<code>T</code> es Do♯). Lo que va entre <code>[ ]</code> se toca junto, las letras pegadas van rápido, un espacio es una pausa corta y <code>|</code> una pausa larga.</p>
+        <p style="margin:0">También acepta sílabas: <code>mi(x5)-la-mi do'</code>. El <code>'</code> sube una octava y la coma la baja.</p>
         <div class="row">
-          <label for="seqOct">Octava base</label>
+          <label for="songName">Nombre</label>
+          <input id="songName" type="text" placeholder="Mi canción" maxlength="60">
+          <label for="seqFmt">Formato</label>
+          <select id="seqFmt"><option value="auto">Automático</option><option value="vp">Letras (Virtual Piano)</option><option value="solfa">Sílabas (do re mi)</option></select>
+          <label for="seqOct">Octava de las sílabas</label>
           <select id="seqOct"><option value="3">3 · abajo del Do central</option><option value="4" selected>4 · desde el Do central</option><option value="5">5 · arriba</option></select>
-          <button class="btn primary" id="seqMake" type="button">Crear ejercicio</button>
-          <span id="seqMsg"></span>
         </div>
+        <textarea id="seqIn" spellcheck="false" placeholder="[t8] u o u [y9] i p i | [te] u o s"></textarea>
+        <div class="row">
+          <button class="btn primary" id="seqMake" type="button">Guardar canción</button>
+          <button class="btn" id="seqNew" type="button">Nueva</button>
+          <span id="seqMsg" aria-live="polite"></span>
+        </div>
+        <div class="songs" id="songList"></div>
       </div>
     </div>
 
@@ -288,6 +303,7 @@ body.focus .kb-wrap{padding-bottom:20px}
     <span id="kbNote">La tecla azul es la que sigue. El número es el dedo.</span>
     <div class="tools">
       <button id="btnFall" class="btn small" type="button">Ocultar notas que caen</button>
+      <button id="btnPcMode" class="btn small" type="button">Compu: A–K</button>
       <button id="btnNames" class="btn small" type="button">Ver C D E</button>
       <button id="btnCenter" class="btn small" type="button">Ir al Do central</button>
     </div>
@@ -303,7 +319,7 @@ const SOLB = ['Do','Re♭','Re','Mi♭','Mi','Fa','Sol♭','Sol','La♭','La','S
 const LET = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const LETB = ['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
 const BLACK = [1,3,6,8,10];
-const LOW = 36, HIGH = 84;              // Do2 a Do6
+let LOW = 36, HIGH = 84;                // Do2 a Do6; se amplía si una canción lo necesita
 const LPC = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
 const SOLFA_NAME = { C:'Do', D:'Re', E:'Mi', F:'Fa', G:'Sol', A:'La', B:'Si' };
 let letters = false;
@@ -482,7 +498,7 @@ const LESSONS = [
 LESSONS.forEach((l, i) => l.exercises.forEach((e, j) => { e.steps = seq(e.notes); e.key = i + '.' + j; e.meter = e.meter || l.meter || 4; }));
 
 /* ---------- Progreso ---------- */
-let progress = { ex: {}, last: {}, custom: { text: '', oct: 4 } };
+let progress = { ex: {}, last: {}, custom: { text: '', oct: 4 }, songs: [] };
 try {
   const s = JSON.parse(localStorage.getItem('tdc2'));
   if (s && s.ex) progress = Object.assign(progress, s);
@@ -491,6 +507,8 @@ try {
     if (old && Array.isArray(old.done)) old.done.forEach((d, i) => { if (d) LESSONS[i].exercises.forEach(e => progress.ex[e.key] = { done: true, best: 0 }); });
   }
 } catch (e) {}
+if (!Array.isArray(progress.songs)) progress.songs = [];
+if (progress.custom?.text && !progress.songs.length) progress.songs.push({ id: 's' + Date.now(), name: 'Mi secuencia', text: progress.custom.text, fmt: 'solfa', oct: progress.custom.oct || 4 });
 const save = () => { try { localStorage.setItem('tdc2', JSON.stringify(progress)); } catch (e) {} };
 const exDone = e => !!(e.key && progress.ex[e.key]?.done);
 const lessonDone = i => LESSONS[i].exercises.every(exDone);
@@ -544,11 +562,100 @@ function parseSolfa(text, baseOct) {
   }
   return out;
 }
+/* Formato Virtual Piano: 1 2 3 … 0 q w … m son las teclas blancas de Do2 a Do7; t = Do central.
+   Mayúscula o Shift = sostenido. [ ] juntas · pegadas = rápido · espacio = pausa corta · | = pausa larga */
+const VP_WHITE = '1234567890qwertyuiopasdfghjklzxcvbnm';
+const VP_SHIFT = { '!':'1', '@':'2', '$':'4', '%':'5', '^':'6', '*':'8', '(':'9' };
+const VP_SHIFT_INV = Object.fromEntries(Object.entries(VP_SHIFT).map(([s, b]) => [b, s]));
+function vpNote(base, sharp) {
+  const i = VP_WHITE.indexOf(base); if (i < 0) return null;
+  const oct = 2 + Math.floor(i / 7), L = 'CDEFGAB'[i % 7];
+  const sh = sharp && L !== 'E' && L !== 'B';
+  return { m: (oct + 1) * 12 + LPC[L] + (sh ? 1 : 0), sp: { L, acc: sh ? '#' : '', oct } };
+}
+function vpChar(ch) {
+  if (VP_SHIFT[ch]) return vpNote(VP_SHIFT[ch], true);
+  if (/[A-Z]/.test(ch)) return vpNote(ch.toLowerCase(), true);
+  return vpNote(ch, false);
+}
+const VP_LABEL = {};
+[...VP_WHITE].forEach(ch => {
+  const w = vpNote(ch, false); VP_LABEL[w.m] = ch;
+  const s = vpNote(ch, true); if (s.m !== w.m) VP_LABEL[s.m] = /[a-z]/.test(ch) ? ch.toUpperCase() : VP_SHIFT_INV[ch];
+});
+function parseVP(text) {
+  const ev = [];
+  const gap = t => { if (ev.length) ev[ev.length - 1].ticks += t; };
+  const uniq = ns => { const seen = new Set(); return ns.filter(n => !seen.has(n.m) && seen.add(n.m)).sort((a, b) => a.m - b.m); };
+  let i = 0;
+  while (i < text.length && ev.length < 2000) {
+    const c = text[i];
+    if (c === '[') {
+      const j = text.indexOf(']', i), inner = text.slice(i + 1, j < 0 ? text.length : j);
+      i = j < 0 ? text.length : j + 1;
+      if (/\S\s+\S/.test(inner.trim())) {             // [a s d] con espacios = arpegio rápido
+        for (const ch of inner) { const n = vpChar(ch); if (n) ev.push({ ns: [n], ticks: 0.5 }); }
+      } else {
+        const ns = uniq([...inner].map(vpChar).filter(Boolean));
+        if (ns.length) ev.push({ ns, ticks: 1 });
+      }
+      continue;
+    }
+    if (c === '|') { gap(2); i++; continue; }
+    if (/\s/.test(c) || c === '-') { gap(1); while (i < text.length && (/\s/.test(text[i]) || text[i] === '-')) i++; continue; }
+    const n = vpChar(c); if (n) ev.push({ ns: [n], ticks: 1 });
+    i++;
+  }
+  return ev.map(e => ({ ns: e.ns, b: e.ticks * 0.5, lb: null, f: null }));
+}
+function songFormat(song) {
+  if (song.fmt === 'vp' || song.fmt === 'solfa') return song.fmt;
+  const t = song.text || '';
+  if (/[\[\]|]/.test(t)) return 'vp';
+  const letters = (t.match(/[a-záéíóú]/gi) || []).length;
+  const syl = (t.match(/sol|do|re|mi|fa|la|si/gi) || []).join('').length;
+  return letters && syl / letters > 0.7 ? 'solfa' : 'vp';
+}
+function songSteps(song) { return songFormat(song) === 'solfa' ? parseSolfa(song.text, +song.oct || 4) : parseVP(song.text); }
 function buildCustom() {
-  const steps = parseSolfa(progress.custom.text || '', +progress.custom.oct || 4);
-  return { id: 'c', unit: 'Extra · Redes', title: 'Tu secuencia', view: 'colors', colors: true, editor: true,
-    intro: ['Pega o escribe aquí la melodía de cualquier tutorial y practícala con el micrófono, a tu paso o con ritmo (todas las notas duran un tiempo).'],
-    exercises: steps.length ? [{ label: 'Tu secuencia', text: `${steps.length} notas.`, steps, meter: 4, key: null }] : [] };
+  const exs = (progress.songs || []).map(s => {
+    const steps = songSteps(s);
+    return { label: s.name, text: `${steps.length} notas · ${songFormat(s) === 'vp' ? 'letras Virtual Piano' : 'sílabas'}.`, steps, meter: 4, key: null, songId: s.id };
+  }).filter(e => e.steps.length);
+  return { id: 'c', unit: 'Extra · Redes', title: 'Tus canciones', view: 'staff', names: true, editor: true,
+    intro: ['Guarda aquí las partituras que encuentres y practícalas con las notas que caen, a tu paso o con ritmo. Cada canción guardada es un ejercicio.'],
+    exercises: exs };
+}
+let editingSong = null;
+function renderSongList() {
+  const box = $('#songList'); box.innerHTML = '';
+  (progress.songs || []).forEach(s => {
+    const n = songSteps(s).length;
+    const row = document.createElement('div');
+    row.className = 'song' + (ex()?.songId === s.id ? ' cur' : '');
+    row.innerHTML = `<span class="nm"></span><span class="meta">${n} notas</span>`;
+    row.querySelector('.nm').textContent = s.name;
+    const mk = (txt, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn small'; b.textContent = txt; b.addEventListener('click', fn); row.appendChild(b); return b; };
+    mk('Practicar', () => { const i = st.les.exercises.findIndex(e => e.songId === s.id); if (i >= 0) { stopAll(); st.E = i; resetRun(); renderExercise(); renderSongList(); $('#exBox').scrollIntoView({ block: 'start', behavior: 'smooth' }); } });
+    mk('Editar', () => {
+      editingSong = s.id;
+      $('#songName').value = s.name; $('#seqIn').value = s.text; $('#seqFmt').value = s.fmt || 'auto'; $('#seqOct').value = String(s.oct || 4);
+      $('#seqMake').textContent = 'Guardar cambios'; $('#seqMsg').textContent = `Editando «${s.name}».`;
+      $('#seqIn').focus();
+    });
+    const del = mk('Borrar', () => {
+      if (del.dataset.sure !== '1') { del.dataset.sure = '1'; del.textContent = '¿Borrar?'; setTimeout(() => { del.dataset.sure = ''; del.textContent = 'Borrar'; }, 3000); return; }
+      progress.songs = progress.songs.filter(x => x.id !== s.id); save();
+      if (editingSong === s.id) clearEditor();
+      setLesson('c');
+    });
+    box.appendChild(row);
+  });
+}
+function clearEditor() {
+  editingSong = null;
+  $('#songName').value = ''; $('#seqIn').value = ''; $('#seqFmt').value = 'auto';
+  $('#seqMake').textContent = 'Guardar canción';
 }
 function getLesson(id) {
   if (id === 'r') return buildRoutine();
@@ -612,8 +719,9 @@ const PCOFF = { a:0, w:1, s:2, e:3, d:4, f:5, t:6, g:7, y:8, h:9, u:10, j:11, k:
 let pcBase = 60;
 function buildKeys() {
   kb.innerHTML = '';
-  const label = {};
-  Object.entries(PCOFF).forEach(([k, o]) => label[pcBase + o] = k.toUpperCase());
+  let label = {};
+  if (pcMode === 'vp') label = VP_LABEL;
+  else Object.entries(PCOFF).forEach(([k, o]) => label[pcBase + o] = k.toUpperCase());
   let whites = 0;
   for (let m = LOW; m <= HIGH; m++) if (!BLACK.includes(pc(m))) whites++;
   const W = 100 / whites; let wi = 0;
@@ -635,6 +743,7 @@ function buildKeys() {
     kb.appendChild(el); keyEl[m] = el;
   }
   kb.classList.toggle('colors', st.view === 'colors');
+  kb.parentElement.style.minWidth = Math.max(920, whites * 31) + 'px';
 }
 function press(m, ms = 220) {
   const el = keyEl[m]; if (!el) return;
@@ -770,7 +879,8 @@ function renderNav() {
     const status = lessonMastered(i) ? 'Dominada ✓' : lessonDone(i) ? 'Hecha' : n ? `${n} de ${tot}` : 'Pendiente';
     add(String(i), i + 1, l.title, status, lessonDone(i));
   });
-  add('c', '✎', 'Tu secuencia', progress.custom.text ? 'Lista para practicar' : 'Escribe una melodía', false);
+  const ns = (progress.songs || []).length;
+  add('c', '✎', 'Tus canciones', ns ? `${ns} ${ns === 1 ? 'canción' : 'canciones'}` : 'Pega una partitura', false);
 }
 function renderLesson() {
   const l = st.les;
@@ -786,7 +896,7 @@ function renderLesson() {
   });
   if (l.goal) { const g = document.createElement('p'); g.className = 'goal'; g.textContent = l.goal; intro.appendChild(g); }
   $('#editorBox').hidden = !l.editor;
-  if (l.editor) { $('#seqIn').value = progress.custom.text || ''; $('#seqOct').value = String(progress.custom.oct || 4); }
+  if (l.editor) renderSongList();
   $('#exBox').hidden = !l.exercises.length;
   if (l.exercises.length) renderExercise();
   else renderTargets();
@@ -850,14 +960,18 @@ function updateMarks() {
 }
 function feedback(msg, cls) { const f = $('#feedback'); f.textContent = msg; f.className = 'feedback ' + cls; }
 
-function setLesson(id) {
+function setLesson(id, songId) {
   stopAll();
   st.id = id; st.les = getLesson(id);
+  const all = st.les.exercises.flatMap(e => e.steps.flatMap(s => s.ns.map(n => n.m)));
+  LOW = Math.max(24, Math.min(36, Math.floor(Math.min(36, ...all) / 12) * 12));
+  HIGH = Math.min(108, Math.max(84, Math.ceil(Math.max(84, ...all) / 12) * 12));
   st.view = st.les.view || 'names';
   st.showNames = st.les.names !== false;
   st.showKey = st.les.keyHint !== false;
   const firstUndone = st.les.exercises.findIndex(e => e.key && !exDone(e));
   st.E = firstUndone > 0 ? firstUndone : 0;
+  if (songId) { const k = st.les.exercises.findIndex(e => e.songId === songId); if (k >= 0) st.E = k; }
   resetRun();
   buildKeys(); renderNav(); renderLesson();
 }
@@ -1042,6 +1156,12 @@ function playDemo() {
 document.addEventListener('keydown', e => {
   if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
   if (/^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement?.tagName) && document.activeElement.type !== 'range' && document.activeElement.type !== 'checkbox') return;
+  if (pcMode === 'vp') {                 // distribución Virtual Piano: Shift = sostenido
+    const base = e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : e.code.startsWith('Digit') ? e.code.slice(5) : null;
+    const n = base && vpNote(base, e.shiftKey);
+    if (n) { e.preventDefault(); handleNote(n.m, 'pc'); }
+    return;
+  }
   const k = e.key.toLowerCase();
   if (k === 'm') { toggleFocus(); return; }
   if (k === 'z' || k === 'x') {
@@ -1303,13 +1423,28 @@ $('#btnNames').addEventListener('click', () => {
 });
 $('#btnCenter').addEventListener('click', () => scrollToKey(60, true));
 $('#seqMake').addEventListener('click', () => {
-  const text = $('#seqIn').value, oct = +$('#seqOct').value;
-  const n = parseSolfa(text, oct).length;
-  if (!n) { $('#seqMsg').textContent = 'No encontré notas. Escribe sílabas como do, re, mi.'; return; }
-  progress.custom = { text, oct }; save();
-  setLesson('c');
-  $('#seqMsg').textContent = `${n} notas listas.`;
+  const song = { id: editingSong || 's' + Date.now(), name: $('#songName').value.trim() || `Canción ${progress.songs.length + 1}`,
+                 text: $('#seqIn').value, fmt: $('#seqFmt').value, oct: +$('#seqOct').value };
+  const n = songSteps(song).length;
+  if (!n) { $('#seqMsg').textContent = 'No encontré notas. Pega letras estilo Virtual Piano o sílabas como do, re, mi.'; return; }
+  const i = progress.songs.findIndex(s => s.id === song.id);
+  if (i >= 0) progress.songs[i] = song; else progress.songs.push(song);
+  save();
+  clearEditor();
+  setLesson('c', song.id);
+  $('#seqMsg').textContent = `«${song.name}» guardada: ${n} notas. Ya está abajo para practicar.`;
 });
+$('#seqNew').addEventListener('click', () => { clearEditor(); $('#seqMsg').textContent = ''; $('#songName').focus(); });
+let pcMode = 'ak';
+try { if (localStorage.getItem('tdc-pc') === 'vp') pcMode = 'vp'; } catch (e) {}
+function setPcMode(mode) {
+  pcMode = mode;
+  $('#btnPcMode').textContent = mode === 'vp' ? 'Compu: Virtual Piano' : 'Compu: A–K';
+  try { localStorage.setItem('tdc-pc', mode); } catch (e) {}
+  buildKeys(); renderTargets();
+}
+$('#btnPcMode').addEventListener('click', () => setPcMode(pcMode === 'vp' ? 'ak' : 'vp'));
+$('#btnPcMode').textContent = pcMode === 'vp' ? 'Compu: Virtual Piano' : 'Compu: A–K';
 
 const firstOpen = LESSONS.findIndex((l, i) => !lessonDone(i));
 setLesson(String(firstOpen === -1 ? 0 : firstOpen));
