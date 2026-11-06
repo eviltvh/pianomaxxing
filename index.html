@@ -191,6 +191,20 @@ body.focus .kb-wrap{padding-bottom:20px}
 .wk.down,.bk.down{transform:translateY(2px);filter:brightness(.82)}
 .wk.hit,.bk.hit{background:var(--ok)!important}
 .wk.miss,.bk.miss{background:var(--bad)!important}
+.wk.ctl{background:var(--accent-soft);color:var(--ink)}
+.bk.ctl{background:#262D52}
+.cl{font:700 .62rem/1.1 var(--f-mono);text-align:center;padding:2px 1px;color:var(--accent);word-break:break-word;max-width:100%}
+.bk .cl{color:#C9D2FF}
+.wk.ctl.target,.bk.ctl.target{color:var(--on-accent)}
+.sc{padding:0 12px 12px;display:grid;gap:8px;font-size:.86rem}
+.sc p{margin:0;color:var(--muted)}
+.scrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font:500 .8rem/1.3 var(--f-mono)}
+.scrow select{border:2px solid var(--line);background:var(--surface);padding:.3rem .4rem;max-width:100%;font-size:.78rem}
+.scrow input{accent-color:var(--accent);width:16px;height:16px}
+.sclist{margin:0;padding:0;list-style:none;display:grid;gap:3px;font-size:.82rem}
+.sclist b{display:inline-block;min-width:4.6rem;font:600 .76rem/1.4 var(--f-mono);color:var(--accent)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:20;
+  background:var(--ink);color:var(--bg);border:2px solid var(--line);box-shadow:4px 4px 0 var(--accent);padding:.6rem 1rem;font:600 .95rem/1.2 var(--f-body);max-width:calc(100% - 32px)}
 .fg{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:700 .82rem/1 var(--f-mono);background:var(--on-accent);color:var(--accent)}
 .bk .fg{width:19px;height:19px;font-size:.7rem}
 
@@ -233,6 +247,19 @@ body.focus .kb-wrap{padding-bottom:20px}
         <li>Poco y diario: 15 a 20 minutos con la Rutina de hoy, que mezcla calentamiento, repaso de algo viejo y algo nuevo. Repasar con días de por medio fija mejor que practicar mucho un solo día.</li>
         <li>Lento primero: baja la velocidad hasta tocarlo limpio y súbela de a poco.</li>
       </ol>
+    </details>
+    <details class="method" id="scHelp">
+      <summary>Atajos con notas</summary>
+      <div class="sc">
+        <p>Maneja todo desde tu teclado sin tocar la compu: una octava funciona como control remoto. Las teclas de atajo tienen su función escrita en la pantalla.</p>
+        <label class="scrow"><input type="checkbox" id="scOn"> Activar atajos</label>
+        <label class="scrow" for="scZone">Octava de control
+          <select id="scZone"><option value="high">Do6 a Do7 (la más aguda de 61 teclas)</option><option value="low">Do1 a Do2 (la más grave de 88 teclas)</option></select>
+        </label>
+        <ul class="sclist" id="scList"></ul>
+        <p>Si tu teclado tiene 49 teclas, súbelo una octava con su botón de octava o transposición: las lecciones siguen funcionando y llegas a los atajos.</p>
+        <p>Si una canción usa alguna de esas teclas, esa tecla vuelve a sonar como nota mientras practicas esa canción.</p>
+      </div>
     </details>
     <nav class="lessons" id="nav" aria-label="Lecciones"></nav>
   </aside>
@@ -298,11 +325,13 @@ body.focus .kb-wrap{padding-bottom:20px}
   </section>
 </main>
 
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <section class="wrap kb-wrap">
   <div class="kb-bar">
     <span id="kbNote">La tecla azul es la que sigue. El número es el dedo.</span>
     <div class="tools">
       <button id="btnFall" class="btn small" type="button">Ocultar notas que caen</button>
+      <button id="btnSc" class="btn small" type="button">Atajos con notas: sí</button>
       <button id="btnPcMode" class="btn small" type="button">Compu: A–K</button>
       <button id="btnNames" class="btn small" type="button">Ver C D E</button>
       <button id="btnCenter" class="btn small" type="button">Ir al Do central</button>
@@ -739,11 +768,18 @@ function buildKeys() {
       el.innerHTML = `${m === 60 ? '<span class="mc">central</span>' : ''}<span class="pc">${label[m] || ''}</span><span class="nm">${name}</span>`;
       wi++;
     }
+    const cmd = scCmd(m);
+    if (cmd) {                           // tecla de atajo: muestra su función
+      el.classList.add('ctl'); el.title = `${nmOct(m)}: ${cmd.d}`;
+      const c = document.createElement('span'); c.className = 'cl'; c.textContent = cmd.t;
+      el.prepend(c);
+    }
     el.addEventListener('pointerdown', e => { e.preventDefault(); handleNote(m, 'screen'); });
     kb.appendChild(el); keyEl[m] = el;
   }
   kb.classList.toggle('colors', st.view === 'colors');
   kb.parentElement.style.minWidth = Math.max(920, whites * 31) + 'px';
+  measureKeys();
 }
 function press(m, ms = 220) {
   const el = keyEl[m]; if (!el) return;
@@ -903,6 +939,7 @@ function renderLesson() {
 }
 function renderExercise() {
   const e = ex(), l = st.les;
+  buildKeys();                           // las teclas de atajo dependen de las notas del ejercicio
   const pills = $('#expills'); pills.innerHTML = '';
   l.exercises.forEach((x, i) => {
     const b = document.createElement('button');
@@ -963,9 +1000,7 @@ function feedback(msg, cls) { const f = $('#feedback'); f.textContent = msg; f.c
 function setLesson(id, songId) {
   stopAll();
   st.id = id; st.les = getLesson(id);
-  const all = st.les.exercises.flatMap(e => e.steps.flatMap(s => s.ns.map(n => n.m)));
-  LOW = Math.max(24, Math.min(36, Math.floor(Math.min(36, ...all) / 12) * 12));
-  HIGH = Math.min(108, Math.max(84, Math.ceil(Math.max(84, ...all) / 12) * 12));
+  computeRange();
   st.view = st.les.view || 'names';
   st.showNames = st.les.names !== false;
   st.showKey = st.les.keyHint !== false;
@@ -1012,6 +1047,8 @@ function matchStep(s, m, src) {
   return 'done';
 }
 function handleNote(m, src) {
+  const cmd = scCmd(m);
+  if (cmd) { runCmd(cmd, m); return; }
   if (src === 'screen' || src === 'pc') playNote(m, 0.45);
   if (src !== 'midi') press(m);
   $('#heard').textContent = nmOct(m);
@@ -1225,7 +1262,7 @@ function detect(b, sr) {
   for (let i = 0; i < n; i++) s += b[i] * b[i];
   const rms = Math.sqrt(s / n);
   if (rms < 0.006) return { rms, f: -1 };
-  const minT = Math.floor(sr / 1400), maxT = Math.min(Math.floor(sr / 60), n >> 1), W = n - maxT;
+  const minT = Math.floor(sr / (shortcutsOn && scZone === 'high' ? 2100 : 1400)), maxT = Math.min(Math.floor(sr / 60), n >> 1), W = n - maxT;
   for (let t = 0; t <= maxT; t++) {
     let acc = 0, m = 0;
     for (let i = 0; i < W; i++) { const x = b[i], y = b[i + t]; acc += x * y; m += x * x + y * y; }
@@ -1265,7 +1302,7 @@ function listen() {
   if (f > 0) {
     const m = Math.round(69 + 12 * Math.log2(f / 440));
     if (m === cand) cnt++; else { cand = m; cnt = 1; }
-    if (cnt >= 2 && m >= 21 && m <= 108) {
+    if (cnt >= (scCmd(m) ? 4 : 2) && m >= 21 && m <= 108) {   // los atajos piden una nota más estable
       const recentOnset = now - onsetAt < 180 && now - lastFireAt > 110;
       const newPitch = lastFired < 0 || pc(m) !== pc(lastFired);
       if (recentOnset || newPitch) { lastFired = m; lastFireAt = now; onsetAt = 0; handleNote(m, 'mic'); }
@@ -1322,7 +1359,7 @@ function drawFall(beat) {
   fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const cs = getComputedStyle(document.documentElement), col = k => cs.getPropertyValue(k).trim();
   const ss = steps(), sb = st.sb || [], meter = ex().meter || 4;
-  const spb = 60 / tempo(), visible = Math.max(4, 3.2 / spb), ppb = H / visible;
+  const spb = 60 / tempo(), visible = Math.max(meter + 2.5, 3.2 / spb), ppb = H / visible;
   fctx.fillStyle = col('--stage'); fctx.fillRect(0, 0, W, H);
   // columnas de teclas negras y guías en cada Do y Fa
   for (const m in keyGeo) {
@@ -1394,6 +1431,106 @@ $('#btnFocus').addEventListener('click', () => toggleFocus());
 setFall(fallOn);
 try { if (localStorage.getItem('tdc-focus') === '1') toggleFocus(true); } catch (e) {}
 requestAnimationFrame(fallFrame);
+
+/* ---------- Atajos con notas: una octava del teclado sirve de control remoto ---------- */
+let shortcutsOn = true, scZone = 'high', lastCmdAt = 0;
+try {
+  if (localStorage.getItem('tdc-sc') === '0') shortcutsOn = false;
+  if (localStorage.getItem('tdc-sczone') === 'low') scZone = 'low';
+} catch (e) {}
+const scBase = () => scZone === 'high' ? 84 : 24;       // Do6 a Do7, o Do1 a Do2
+const SC_CMDS = {
+  0:  { t: 'Oír',   d: 'Escuchar ejemplo',              fn: () => playDemo() },
+  1:  { t: '−',     d: 'Más lento',                     fn: () => tempoBy(-5) },
+  2:  { t: 'Otra',  d: 'Reiniciar ejercicio',           fn: () => restart() },
+  3:  { t: '+',     d: 'Más rápido',                    fn: () => tempoBy(5) },
+  4:  { t: '◀',     d: 'Ejercicio anterior',            fn: () => exBy(-1) },
+  5:  { t: '▶',     d: 'Ejercicio siguiente',           fn: () => exBy(1) },
+  6:  { t: '«',     d: 'Lección anterior',              fn: () => lessonBy(-1) },
+  7:  { t: 'Ritmo', d: 'Empezar o detener con ritmo',   fn: () => rhythmGo() },
+  8:  { t: '»',     d: 'Lección siguiente',             fn: () => lessonBy(1) },
+  9:  { t: 'Modo',  d: 'Cambiar entre a tu paso y con ritmo', fn: () => setMode(st.mode === 'wait' ? 'rhythm' : 'wait') },
+  10: { t: '☰',     d: 'Ocultar o mostrar el menú',     fn: () => toggleFocus() },
+  11: { t: 'Pista', d: 'Mostrar u ocultar la tecla azul', fn: () => toggleKeyHint() },
+  12: { t: 'Hoy',   d: 'Ir a la rutina de hoy',         fn: () => setLesson('r') }
+};
+const usedCache = new WeakMap();
+function exUses(m) {
+  const e = ex(); if (!e) return false;
+  let set = usedCache.get(e);
+  if (!set) { set = new Set(e.steps.flatMap(s => s.ns.map(n => n.m))); usedCache.set(e, set); }
+  return set.has(m);
+}
+function scCmd(m) {
+  if (!shortcutsOn) return null;
+  const o = m - scBase();
+  if (o < 0 || o > 12 || exUses(m)) return null;      // si la canción usa esa tecla, suena como nota
+  return SC_CMDS[o];
+}
+function runCmd(cmd, m) {
+  const now = performance.now();
+  if (now - lastCmdAt < 350) return;
+  lastCmdAt = now;
+  flash(m, 'hit'); toast(cmd.d);
+  cmd.fn();
+}
+let toastTimer = 0;
+function toast(t) {
+  const el = $('#toast'); el.textContent = t; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 1500);
+}
+function tempoBy(d) {
+  const r = $('#tempo'); r.value = Math.max(+r.min, Math.min(+r.max, +r.value + d));
+  $('#tempoVal').textContent = r.value; toast(`Velocidad ${r.value}`);
+}
+function exBy(d) {
+  const l = st.les, i = st.E + d;
+  if (!ex() || i < 0 || i >= l.exercises.length) { toast(d > 0 ? 'Ya es el último ejercicio' : 'Ya es el primer ejercicio'); return; }
+  stopAll(); st.E = i; resetRun(); renderExercise(); if (l.editor) renderSongList();
+}
+function lessonBy(d) {
+  const order = ['r', ...LESSONS.map((_, i) => String(i)), 'c'];
+  const i = Math.max(0, Math.min(order.length - 1, order.indexOf(st.id) + d));
+  if (order[i] !== st.id) setLesson(order[i]);
+}
+function rhythmGo() {
+  if (!ex()) return;
+  if (st.mode !== 'rhythm') setMode('rhythm');
+  startRhythm();
+}
+function toggleKeyHint() {
+  st.showKey = !st.showKey; $('#optKey').checked = st.showKey; renderTargets();
+  toast(st.showKey ? 'Tecla azul visible' : 'Tecla azul oculta');
+}
+function computeRange() {
+  const all = st.les ? st.les.exercises.flatMap(e => e.steps.flatMap(s => s.ns.map(n => n.m))) : [];
+  let lo = Math.min(36, ...all), hi = Math.max(84, ...all);
+  if (shortcutsOn) { lo = Math.min(lo, scBase()); hi = Math.max(hi, scBase() + 12); }
+  LOW = Math.max(24, Math.floor(lo / 12) * 12);
+  HIGH = Math.min(108, Math.ceil(hi / 12) * 12);
+}
+function renderShortcutHelp() {
+  const ul = $('#scList'); ul.innerHTML = '';
+  Object.entries(SC_CMDS).forEach(([o, c]) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<b></b> <span></span>`;
+    li.querySelector('b').textContent = nmOct(scBase() + +o);
+    li.querySelector('span').textContent = c.d;
+    ul.appendChild(li);
+  });
+  $('#btnSc').textContent = shortcutsOn ? 'Atajos con notas: sí' : 'Atajos con notas: no';
+  $('#scOn').checked = shortcutsOn; $('#scZone').value = scZone;
+}
+function setShortcuts(on, zone) {
+  shortcutsOn = on; if (zone) scZone = zone;
+  try { localStorage.setItem('tdc-sc', on ? '1' : '0'); localStorage.setItem('tdc-sczone', scZone); } catch (e) {}
+  computeRange(); buildKeys(); renderTargets(); renderShortcutHelp();
+  if (on) scrollToKey(scBase() + 6, true);
+}
+$('#btnSc').addEventListener('click', () => setShortcuts(!shortcutsOn));
+$('#scOn').addEventListener('change', e => setShortcuts(e.target.checked));
+$('#scZone').addEventListener('change', e => setShortcuts(shortcutsOn, e.target.value));
+renderShortcutHelp();
 
 /* ---------- Controles ---------- */
 $('#btnMic').addEventListener('click', toggleMic);
